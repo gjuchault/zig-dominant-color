@@ -1,6 +1,6 @@
 .{
     .name = .dominant_color,
-    .version = "0.1.1",
+    .version = "0.1.2",
     .fingerprint = 0xf4f15186c301c1d6,
     .minimum_zig_version = "0.15.1",
     .dependencies = .{

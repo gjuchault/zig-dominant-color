@@ -196,7 +196,7 @@ fn pixelFromZigimg(pixel: zigimg.color.Colorf32) RGBA {
     return RGBA{ .r = r, .g = g, .b = b, .a = a };
 }
 
-fn extractPixels(allocator: std.mem.Allocator, image: *zigimg.Image) DominantColorError![]RGBA {
+fn extractPixels(allocator: std.mem.Allocator, image: *const zigimg.Image) DominantColorError![]RGBA {
     const pixel_count = image.width * image.height;
     const pixels = try allocator.alloc(RGBA, pixel_count);
     errdefer allocator.free(pixels);
@@ -211,7 +211,7 @@ fn extractPixels(allocator: std.mem.Allocator, image: *zigimg.Image) DominantCol
     return pixels;
 }
 
-fn resizeIfLarge(allocator: std.mem.Allocator, image: *zigimg.Image) DominantColorError!zigimg.Image {
+fn resizeIfLarge(allocator: std.mem.Allocator, image: *const zigimg.Image) DominantColorError!zigimg.Image {
     const width = image.width;
     const height = image.height;
 
@@ -292,7 +292,7 @@ fn resizeIfLarge(allocator: std.mem.Allocator, image: *zigimg.Image) DominantCol
     return resized;
 }
 
-fn findClusters(allocator: std.mem.Allocator, image: *zigimg.Image, n_cluster: u32) DominantColorError!struct { clusters: KMeanClusterGroup, total_weight: f64, allocator: std.mem.Allocator } {
+fn findClusters(allocator: std.mem.Allocator, image: *const zigimg.Image, n_cluster: u32) DominantColorError!struct { clusters: KMeanClusterGroup, total_weight: f64, allocator: std.mem.Allocator } {
     const width = image.width;
     const height = image.height;
     const needs_resize = width > resize_to or height > resize_to;
@@ -381,7 +381,7 @@ fn findClusters(allocator: std.mem.Allocator, image: *zigimg.Image, n_cluster: u
     return .{ .clusters = clusters, .total_weight = total_weight, .allocator = allocator };
 }
 
-pub fn find(allocator: std.mem.Allocator, image: *zigimg.Image) DominantColorError!RGBA {
+pub fn find(allocator: std.mem.Allocator, image: *const zigimg.Image) DominantColorError!RGBA {
     const colors = try findN(allocator, image, n_clusters_default);
     defer allocator.free(colors);
     if (colors.len == 0) {
@@ -398,7 +398,7 @@ pub fn find(allocator: std.mem.Allocator, image: *zigimg.Image) DominantColorErr
     return colors[0];
 }
 
-pub fn findN(allocator: std.mem.Allocator, image: *zigimg.Image, n_clusters: u32) DominantColorError![]RGBA {
+pub fn findN(allocator: std.mem.Allocator, image: *const zigimg.Image, n_clusters: u32) DominantColorError![]RGBA {
     const colors = try findWeight(allocator, image, n_clusters);
     defer allocator.free(colors);
 
@@ -409,7 +409,7 @@ pub fn findN(allocator: std.mem.Allocator, image: *zigimg.Image, n_clusters: u32
     return result;
 }
 
-pub fn findWeight(allocator: std.mem.Allocator, image: *zigimg.Image, n_clusters: u32) DominantColorError![]Color {
+pub fn findWeight(allocator: std.mem.Allocator, image: *const zigimg.Image, n_clusters: u32) DominantColorError![]Color {
     const n = if (n_clusters == 0) n_clusters_default else n_clusters;
     var result = try findClusters(allocator, image, n);
     defer result.clusters.deinit(result.allocator);
