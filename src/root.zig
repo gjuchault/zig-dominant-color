@@ -56,6 +56,10 @@ const max_brightness: u16 = 665;
 const min_darkness: u16 = 100;
 const n_clusters_default: u32 = 4;
 
+const DominantColorError = error{
+    UnsupportedImageFormat,
+} || std.mem.Allocator.Error;
+
 pub const Color = struct {
     r: u8,
     g: u8,
@@ -192,7 +196,7 @@ fn pixelFromZigimg(pixel: zigimg.color.Colorf32) RGBA {
     return RGBA{ .r = r, .g = g, .b = b, .a = a };
 }
 
-fn extractPixels(allocator: std.mem.Allocator, image: *zigimg.Image) ![]RGBA {
+fn extractPixels(allocator: std.mem.Allocator, image: *zigimg.Image) DominantColorError![]RGBA {
     const pixel_count = image.width * image.height;
     const pixels = try allocator.alloc(RGBA, pixel_count);
     errdefer allocator.free(pixels);
@@ -207,7 +211,7 @@ fn extractPixels(allocator: std.mem.Allocator, image: *zigimg.Image) ![]RGBA {
     return pixels;
 }
 
-fn resizeIfLarge(allocator: std.mem.Allocator, image: *zigimg.Image) !zigimg.Image {
+fn resizeIfLarge(allocator: std.mem.Allocator, image: *zigimg.Image) DominantColorError!zigimg.Image {
     const width = image.width;
     const height = image.height;
 
@@ -251,7 +255,7 @@ fn resizeIfLarge(allocator: std.mem.Allocator, image: *zigimg.Image) !zigimg.Ima
             rgba_bytes[offset + 3] = pixel.a;
         }
 
-        rgba_image = try zigimg.Image.fromRawPixelsOwned(width, height, rgba_bytes, .rgba32);
+        rgba_image = zigimg.Image.fromRawPixelsOwned(width, height, rgba_bytes, .rgba32) catch return DominantColorError.UnsupportedImageFormat;
         image_needs_deinit = true;
         raw_bytes = rgba_image.rawBytes();
     } else {
@@ -279,7 +283,7 @@ fn resizeIfLarge(allocator: std.mem.Allocator, image: *zigimg.Image) !zigimg.Ima
     errdefer allocator.free(resized_data);
     @memcpy(resized_data, resized_zstbi.data[0..resized_byte_size]);
 
-    const resized = try zigimg.Image.fromRawPixelsOwned(new_w, new_h, resized_data, .rgba32);
+    const resized = zigimg.Image.fromRawPixelsOwned(new_w, new_h, resized_data, .rgba32) catch return DominantColorError.UnsupportedImageFormat;
 
     if (image_needs_deinit) {
         rgba_image.deinit(allocator);
@@ -288,7 +292,7 @@ fn resizeIfLarge(allocator: std.mem.Allocator, image: *zigimg.Image) !zigimg.Ima
     return resized;
 }
 
-fn findClusters(allocator: std.mem.Allocator, image: *zigimg.Image, n_cluster: u32) !struct { clusters: KMeanClusterGroup, total_weight: f64, allocator: std.mem.Allocator } {
+fn findClusters(allocator: std.mem.Allocator, image: *zigimg.Image, n_cluster: u32) DominantColorError!struct { clusters: KMeanClusterGroup, total_weight: f64, allocator: std.mem.Allocator } {
     const width = image.width;
     const height = image.height;
     const needs_resize = width > resize_to or height > resize_to;
@@ -377,7 +381,7 @@ fn findClusters(allocator: std.mem.Allocator, image: *zigimg.Image, n_cluster: u
     return .{ .clusters = clusters, .total_weight = total_weight, .allocator = allocator };
 }
 
-pub fn find(allocator: std.mem.Allocator, image: *zigimg.Image) !RGBA {
+pub fn find(allocator: std.mem.Allocator, image: *zigimg.Image) DominantColorError!RGBA {
     const colors = try findN(allocator, image, n_clusters_default);
     defer allocator.free(colors);
     if (colors.len == 0) {
@@ -394,7 +398,7 @@ pub fn find(allocator: std.mem.Allocator, image: *zigimg.Image) !RGBA {
     return colors[0];
 }
 
-pub fn findN(allocator: std.mem.Allocator, image: *zigimg.Image, n_clusters: u32) ![]RGBA {
+pub fn findN(allocator: std.mem.Allocator, image: *zigimg.Image, n_clusters: u32) DominantColorError![]RGBA {
     const colors = try findWeight(allocator, image, n_clusters);
     defer allocator.free(colors);
 
@@ -405,7 +409,7 @@ pub fn findN(allocator: std.mem.Allocator, image: *zigimg.Image, n_clusters: u32
     return result;
 }
 
-pub fn findWeight(allocator: std.mem.Allocator, image: *zigimg.Image, n_clusters: u32) ![]Color {
+pub fn findWeight(allocator: std.mem.Allocator, image: *zigimg.Image, n_clusters: u32) DominantColorError![]Color {
     const n = if (n_clusters == 0) n_clusters_default else n_clusters;
     var result = try findClusters(allocator, image, n);
     defer result.clusters.deinit(result.allocator);
@@ -438,7 +442,7 @@ pub fn hex(color: RGBA) [7]u8 {
     return result;
 }
 
-pub fn hexString(allocator: std.mem.Allocator, color: RGBA) ![]const u8 {
+pub fn hexString(allocator: std.mem.Allocator, color: RGBA) DominantColorError![]const u8 {
     const hex_bytes = hex(color);
     return try allocator.dupe(u8, &hex_bytes);
 }
@@ -450,9 +454,9 @@ fn distance(a: RGBA, b: RGBA) f64 {
     return std.math.sqrt(dr * dr + dg * dg + db * db);
 }
 
-fn loadTestImage(allocator: std.mem.Allocator, path: []const u8) !zigimg.Image {
+fn loadTestImage(allocator: std.mem.Allocator, comptime path: []const u8) DominantColorError!zigimg.Image {
     var read_buffer: [zigimg.io.DEFAULT_BUFFER_SIZE]u8 = undefined;
-    const image = try zigimg.Image.fromFilePath(allocator, path, read_buffer[0..]);
+    const image = zigimg.Image.fromFilePath(allocator, path, read_buffer[0..]) catch @panic("Failed to load test image: " ++ path);
     return image;
 }
 
