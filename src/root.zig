@@ -443,9 +443,6 @@ pub fn hexString(allocator: std.mem.Allocator, color: RGBA) ![]const u8 {
     return try allocator.dupe(u8, &hex_bytes);
 }
 
-const firefox_orange = RGBA{ .r = 230, .g = 96, .b = 0, .a = 255 };
-const firefox_large_dominant = RGBA{ .r = 243, .g = 53, .b = 75, .a = 255 };
-
 fn distance(a: RGBA, b: RGBA) f64 {
     const dr = @as(f64, @floatFromInt(a.r)) - @as(f64, @floatFromInt(b.r));
     const dg = @as(f64, @floatFromInt(a.g)) - @as(f64, @floatFromInt(b.g));
@@ -459,7 +456,9 @@ fn loadTestImage(allocator: std.mem.Allocator, path: []const u8) !zigimg.Image {
     return image;
 }
 
-test "find dominant color" {
+test "firefox.png" {
+    const firefox_orange = RGBA{ .r = 230, .g = 96, .b = 0, .a = 255 };
+
     const path = "src/tests-assets/firefox.png";
     const allocator = std.testing.allocator;
     var image = try loadTestImage(allocator, path);
@@ -477,7 +476,9 @@ test "find dominant color" {
     try std.testing.expect(d < 50.0);
 }
 
-test "find dominant color large" {
+test "firefox-large.png" {
+    const firefox_large_dominant = RGBA{ .r = 243, .g = 53, .b = 75, .a = 255 };
+
     const allocator = std.testing.allocator;
     var image = try loadTestImage(allocator, "src/tests-assets/firefox-large.png");
     defer image.deinit(allocator);
@@ -494,7 +495,7 @@ test "find dominant color large" {
     try std.testing.expect(d < 50.0);
 }
 
-test "single-color image" {
+test "orange.png" {
     const allocator = std.testing.allocator;
     var image = try loadTestImage(allocator, "src/tests-assets/orange.png");
     defer image.deinit(allocator);
@@ -505,7 +506,18 @@ test "single-color image" {
     try std.testing.expectEqualStrings("#FFA500", hex_str);
 }
 
-test "find weight" {
+test "gimp.png" {
+    const allocator = std.testing.allocator;
+    var image = try loadTestImage(allocator, "src/tests-assets/gimp.png");
+    defer image.deinit(allocator);
+
+    const c = try find(allocator, &image);
+    const hex_str = try hexString(allocator, c);
+    defer allocator.free(hex_str);
+    try std.testing.expectEqualStrings("#4E4A42", hex_str);
+}
+
+test "findWeight()" {
     const allocator = std.testing.allocator;
     var image = try loadTestImage(allocator, "src/tests-assets/firefox.png");
     defer image.deinit(allocator);
@@ -522,14 +534,14 @@ test "find weight" {
     }
 }
 
-test "hex format" {
+test "hex()" {
     const color = RGBA{ .r = 0xCB, .g = 0x5A, .b = 0x27, .a = 255 };
     const hex_bytes = hex(color);
     const expected = "#CB5A27";
     try std.testing.expectEqualStrings(expected, &hex_bytes);
 }
 
-test "findN returns correct number of colors" {
+test "findN()" {
     const allocator = std.testing.allocator;
     var image = try loadTestImage(allocator, "src/tests-assets/firefox.png");
     defer image.deinit(allocator);
