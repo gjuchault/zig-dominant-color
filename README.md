@@ -98,10 +98,6 @@ const colors = try dominant_color.findN(allocator, &image, 4);
 const hex_str = try dominant_color.hexString(allocator, color);
 ```
 
-## License
-
-This project is based on Chromium's color analysis code, which is governed by a BSD-style license. See the LICENSE file for details.
-
 ## Credits
 
 - Algorithm ported from [Chromium's color analysis](https://github.com/chromium/chromium/blob/main/ui/gfx/color_analysis.cc) — BSD license
