@@ -1,16 +1,16 @@
 .{
     .name = .dominant_color,
-    .version = "0.1.2",
+    .version = "0.1.3",
     .fingerprint = 0xf4f15186c301c1d6,
-    .minimum_zig_version = "0.15.1",
+    .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .zstbi = .{
-            .url = "git+https://github.com/zig-gamedev/zstbi#2c4b3100ccb7aed90ecc9439030899764e2a8d47",
-            .hash = "zstbi-0.11.0-dev-L0Ea_yaWBwAHwFoCuyjkFyaiSsbjt4UOrkntR0c_nmzz",
+            .url = "git+https://github.com/zig-gamedev/zstbi#3813f5f113b26f644cfa01a30155cc76b3526e91",
+            .hash = "zstbi-0.11.0-dev-L0Ea_3GWBwAh7m54XX055vwLKPTPij5hyqyeq92MXPE2",
         },
         .zigimg = .{
-            .url = "git+https://github.com/zigimg/zigimg.git#f5783e87627cbd9e0b45fad112e9f73503914f36",
-            .hash = "zigimg-0.1.0-8_eo2vBrFQBhsrLpexdcDQY-zrlzkyFZfKuYX-Nry6KN",
+            .url = "git+https://github.com/zigimg/zigimg.git#bebd3609158eb8e98db3c4e0eb609cc1252cc535",
+            .hash = "zigimg-0.1.0-8_eo2gGbFwCvhBtJ9aO9Gvm2l3WdQF44iu472X5EWCMj",
         },
     },
     .paths = .{

@@ -3,17 +3,9 @@ const builtin = @import("builtin");
 const dominant_color = @import("dominant_color");
 const zigimg = @import("zigimg");
 
-pub fn main() !void {
-    var gpa = std.heap.DebugAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var allocator = gpa.allocator();
-
-    if (builtin.mode != .Debug) {
-        allocator = std.heap.c_allocator;
-    }
-
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+pub fn main(init: std.process.Init) !void {
+    var allocator = init.arena.allocator();
+    const args = try init.minimal.args.toSlice(allocator);
 
     if (args.len < 2) {
         std.debug.print("Usage: {s} [-n=N|--number=N] <image_path>\n", .{args[0]});
@@ -55,14 +47,14 @@ pub fn main() !void {
     }
 
     var read_buffer: [zigimg.io.DEFAULT_BUFFER_SIZE]u8 = undefined;
-    var image = zigimg.Image.fromFilePath(allocator, image_path, read_buffer[0..]) catch |err| {
+    var image = zigimg.Image.fromFilePath(allocator, init.io, image_path, read_buffer[0..]) catch |err| {
         std.debug.print("Error: failed to load image '{s}': {s}\n", .{ image_path, @errorName(err) });
         std.process.exit(1);
     };
     defer image.deinit(allocator);
 
     if (n_colors) |n| {
-        const colors = try dominant_color.findN(allocator, &image, n);
+        const colors = try dominant_color.findN(init.io, allocator, &image, n);
         defer allocator.free(colors);
 
         for (colors) |color| {
@@ -71,7 +63,7 @@ pub fn main() !void {
             std.debug.print("{s}\n", .{hex_str});
         }
     } else {
-        const color = try dominant_color.find(allocator, &image);
+        const color = try dominant_color.find(init.io, allocator, &image);
         const hex_str = try dominant_color.hexString(allocator, color);
         defer allocator.free(hex_str);
         std.debug.print("{s}\n", .{hex_str});

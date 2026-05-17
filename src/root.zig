@@ -211,7 +211,7 @@ fn extractPixels(allocator: std.mem.Allocator, image: *const zigimg.Image) Domin
     return pixels;
 }
 
-fn resizeIfLarge(allocator: std.mem.Allocator, image: *const zigimg.Image) DominantColorError!zigimg.Image {
+fn resizeIfLarge(io: std.Io, allocator: std.mem.Allocator, image: *const zigimg.Image) DominantColorError!zigimg.Image {
     const width = image.width;
     const height = image.height;
 
@@ -219,7 +219,7 @@ fn resizeIfLarge(allocator: std.mem.Allocator, image: *const zigimg.Image) Domin
         return image.*;
     }
 
-    zstbi.init(allocator);
+    zstbi.init(io, allocator);
     defer zstbi.deinit();
 
     const aspect = @as(f64, @floatFromInt(width)) / @as(f64, @floatFromInt(height));
@@ -292,7 +292,7 @@ fn resizeIfLarge(allocator: std.mem.Allocator, image: *const zigimg.Image) Domin
     return resized;
 }
 
-fn findClusters(allocator: std.mem.Allocator, image: *const zigimg.Image, n_cluster: u32) DominantColorError!struct { clusters: KMeanClusterGroup, total_weight: f64, allocator: std.mem.Allocator } {
+fn findClusters(io: std.Io, allocator: std.mem.Allocator, image: *const zigimg.Image, n_cluster: u32) DominantColorError!struct { clusters: KMeanClusterGroup, total_weight: f64, allocator: std.mem.Allocator } {
     const width = image.width;
     const height = image.height;
     const needs_resize = width > resize_to or height > resize_to;
@@ -300,7 +300,7 @@ fn findClusters(allocator: std.mem.Allocator, image: *const zigimg.Image, n_clus
     var resized_image: zigimg.Image = undefined;
     var resized_owned = false;
     if (needs_resize) {
-        resized_image = try resizeIfLarge(allocator, image);
+        resized_image = try resizeIfLarge(io, allocator, image);
         resized_owned = true;
         errdefer resized_image.deinit(allocator);
     } else {
@@ -319,10 +319,7 @@ fn findClusters(allocator: std.mem.Allocator, image: *const zigimg.Image, n_clus
     var rng = std.Random.DefaultPrng.init(0);
     const random = rng.random();
 
-    var clusters = KMeanClusterGroup{};
-    clusters.ensureTotalCapacity(allocator, n_cluster) catch |err| {
-        return err;
-    };
+    var clusters: KMeanClusterGroup = try .initCapacity(allocator, n_cluster);
     errdefer clusters.deinit(allocator);
 
     var i: u32 = 0;
@@ -381,8 +378,8 @@ fn findClusters(allocator: std.mem.Allocator, image: *const zigimg.Image, n_clus
     return .{ .clusters = clusters, .total_weight = total_weight, .allocator = allocator };
 }
 
-pub fn find(allocator: std.mem.Allocator, image: *const zigimg.Image) DominantColorError!RGBA {
-    const colors = try findN(allocator, image, n_clusters_default);
+pub fn find(io: std.Io, allocator: std.mem.Allocator, image: *const zigimg.Image) DominantColorError!RGBA {
+    const colors = try findN(io, allocator, image, n_clusters_default);
     defer allocator.free(colors);
     if (colors.len == 0) {
         return RGBA{ .r = 0, .g = 0, .b = 0, .a = 0 };
@@ -398,8 +395,8 @@ pub fn find(allocator: std.mem.Allocator, image: *const zigimg.Image) DominantCo
     return colors[0];
 }
 
-pub fn findN(allocator: std.mem.Allocator, image: *const zigimg.Image, n_clusters: u32) DominantColorError![]RGBA {
-    const colors = try findWeight(allocator, image, n_clusters);
+pub fn findN(io: std.Io, allocator: std.mem.Allocator, image: *const zigimg.Image, n_clusters: u32) DominantColorError![]RGBA {
+    const colors = try findWeight(io, allocator, image, n_clusters);
     defer allocator.free(colors);
 
     const result = try allocator.alloc(RGBA, colors.len);
@@ -409,9 +406,9 @@ pub fn findN(allocator: std.mem.Allocator, image: *const zigimg.Image, n_cluster
     return result;
 }
 
-pub fn findWeight(allocator: std.mem.Allocator, image: *const zigimg.Image, n_clusters: u32) DominantColorError![]Color {
+pub fn findWeight(io: std.Io, allocator: std.mem.Allocator, image: *const zigimg.Image, n_clusters: u32) DominantColorError![]Color {
     const n = if (n_clusters == 0) n_clusters_default else n_clusters;
-    var result = try findClusters(allocator, image, n);
+    var result = try findClusters(io, allocator, image, n);
     defer result.clusters.deinit(result.allocator);
 
     const colors = try allocator.alloc(Color, result.clusters.items.len);
@@ -454,9 +451,9 @@ fn distance(a: RGBA, b: RGBA) f64 {
     return std.math.sqrt(dr * dr + dg * dg + db * db);
 }
 
-fn loadTestImage(allocator: std.mem.Allocator, comptime path: []const u8) DominantColorError!zigimg.Image {
+fn loadTestImage(io: std.Io, allocator: std.mem.Allocator, comptime path: []const u8) DominantColorError!zigimg.Image {
     var read_buffer: [zigimg.io.DEFAULT_BUFFER_SIZE]u8 = undefined;
-    const image = zigimg.Image.fromFilePath(allocator, path, read_buffer[0..]) catch @panic("Failed to load test image: " ++ path);
+    const image = zigimg.Image.fromFilePath(allocator, io, path, read_buffer[0..]) catch @panic("Failed to load test image: " ++ path);
     return image;
 }
 
@@ -465,17 +462,17 @@ test "firefox.png" {
 
     const path = "src/tests-assets/firefox.png";
     const allocator = std.testing.allocator;
-    var image = try loadTestImage(allocator, path);
+    var image = try loadTestImage(std.testing.io, allocator, path);
     defer image.deinit(allocator);
 
-    const c = try find(allocator, &image);
+    const c = try find(std.testing.io, allocator, &image);
     const d = distance(c, firefox_orange);
     const hex_str = try hexString(allocator, c);
     defer allocator.free(hex_str);
 
-    std.debug.print("Found dominant color: {s}\n", .{hex_str});
-    std.debug.print("Firefox orange:       #{X:0>2}{X:0>2}{X:0>2}\n", .{ firefox_orange.r, firefox_orange.g, firefox_orange.b });
-    std.debug.print("Distance:             {d:.2}\n", .{d});
+    // std.debug.print("Found dominant color: {s}\n", .{hex_str});
+    // std.debug.print("Firefox orange:       #{X:0>2}{X:0>2}{X:0>2}\n", .{ firefox_orange.r, firefox_orange.g, firefox_orange.b });
+    // std.debug.print("Distance:             {d:.2}\n", .{d});
 
     try std.testing.expect(d < 50.0);
 }
@@ -484,27 +481,27 @@ test "firefox-large.png" {
     const firefox_large_dominant = RGBA{ .r = 243, .g = 53, .b = 75, .a = 255 };
 
     const allocator = std.testing.allocator;
-    var image = try loadTestImage(allocator, "src/tests-assets/firefox-large.png");
+    var image = try loadTestImage(std.testing.io, allocator, "src/tests-assets/firefox-large.png");
     defer image.deinit(allocator);
 
-    const c = try find(allocator, &image);
+    const c = try find(std.testing.io, allocator, &image);
     const d = distance(c, firefox_large_dominant);
     const hex_str = try hexString(allocator, c);
     defer allocator.free(hex_str);
 
-    std.debug.print("Found dominant color: {s}\n", .{hex_str});
-    std.debug.print("Firefox large orange: #{X:0>2}{X:0>2}{X:0>2}\n", .{ firefox_large_dominant.r, firefox_large_dominant.g, firefox_large_dominant.b });
-    std.debug.print("Distance:             {d:.2}\n", .{d});
+    // std.debug.print("Found dominant color: {s}\n", .{hex_str});
+    // std.debug.print("Firefox large orange: #{X:0>2}{X:0>2}{X:0>2}\n", .{ firefox_large_dominant.r, firefox_large_dominant.g, firefox_large_dominant.b });
+    // std.debug.print("Distance:             {d:.2}\n", .{d});
 
     try std.testing.expect(d < 50.0);
 }
 
 test "orange.png" {
     const allocator = std.testing.allocator;
-    var image = try loadTestImage(allocator, "src/tests-assets/orange.png");
+    var image = try loadTestImage(std.testing.io, allocator, "src/tests-assets/orange.png");
     defer image.deinit(allocator);
 
-    const c = try find(allocator, &image);
+    const c = try find(std.testing.io, allocator, &image);
     const hex_str = try hexString(allocator, c);
     defer allocator.free(hex_str);
     try std.testing.expectEqualStrings("#FFA500", hex_str);
@@ -512,10 +509,10 @@ test "orange.png" {
 
 test "gimp.png" {
     const allocator = std.testing.allocator;
-    var image = try loadTestImage(allocator, "src/tests-assets/gimp.png");
+    var image = try loadTestImage(std.testing.io, allocator, "src/tests-assets/gimp.png");
     defer image.deinit(allocator);
 
-    const c = try find(allocator, &image);
+    const c = try find(std.testing.io, allocator, &image);
     const hex_str = try hexString(allocator, c);
     defer allocator.free(hex_str);
     try std.testing.expectEqualStrings("#4E4A42", hex_str);
@@ -523,18 +520,18 @@ test "gimp.png" {
 
 test "findWeight()" {
     const allocator = std.testing.allocator;
-    var image = try loadTestImage(allocator, "src/tests-assets/firefox.png");
+    var image = try loadTestImage(std.testing.io, allocator, "src/tests-assets/firefox.png");
     defer image.deinit(allocator);
 
-    const colors = try findWeight(allocator, &image, 4);
+    const colors = try findWeight(std.testing.io, allocator, &image, 4);
     defer allocator.free(colors);
 
     try std.testing.expect(colors.len == 4);
 
-    for (colors, 0..) |col, i| {
+    for (colors) |col| {
         const hex_str = try hexString(allocator, col.toRGBA());
         defer allocator.free(hex_str);
-        std.debug.print("{d}/{d} Found dominant color: {s}, weight: {d:.2}\n", .{ i + 1, colors.len, hex_str, col.weight });
+        // std.debug.print("{d}/{d} Found dominant color: {s}, weight: {d:.2}\n", .{ i + 1, colors.len, hex_str, col.weight });
     }
 }
 
@@ -547,10 +544,10 @@ test "hex()" {
 
 test "findN()" {
     const allocator = std.testing.allocator;
-    var image = try loadTestImage(allocator, "src/tests-assets/firefox.png");
+    var image = try loadTestImage(std.testing.io, allocator, "src/tests-assets/firefox.png");
     defer image.deinit(allocator);
 
-    const colors = try findN(allocator, &image, 4);
+    const colors = try findN(std.testing.io, allocator, &image, 4);
     defer allocator.free(colors);
 
     try std.testing.expect(colors.len == 4);
